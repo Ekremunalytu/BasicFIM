@@ -1,0 +1,6 @@
+{
+  "database": {
+    "path": "/app/data/fim_database.db",
+    "timeout": 10.0
+  }
+}

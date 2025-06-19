@@ -1,171 +1,133 @@
-# BasicFIM: Real-Time File Integrity Monitoring Service
+# 🔒 FIM (File Integrity Monitoring) System
 
-![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
-![License](https://img.shields.io/badge/license-MIT-blue)
+Modern, containerized dosya bütünlüğü izleme sistemi. Tam Docker destekli, ana makinenizi kirletmeden çalışır.
 
-A real-time **File Integrity Monitoring (FIM)** microservice designed for modern security platforms. It leverages a powerful monitoring engine to detect file changes instantly and provides a clean REST API for seamless integration with **XDR solutions**.
+## 🌟 Özellikler
 
----
+- **🐳 Tam Docker Destekli**: Ana makinenizi kirletmeden çalışır
+- **🎯 Profil Tabanlı İzleme**: Light, Balanced, Paranoid profilleri
+- **🌐 Web Arayüzü**: Modern, responsive dashboard
+- **🔄 REST API**: Programatik erişim için tam API
+- **📊 Gerçek Zamanlı İzleme**: Dosya değişikliklerini anında yakalama
+- **🗃️ SQLite Database**: Hafif ve hızlı veri saklama
+- **📱 Health Monitoring**: Sistem durumu izleme
+- **🔧 Kolay Kurulum**: Tek komutla başlatma
 
-## Table of Contents
-
-- [About The Project](#about-the-project)
-- [Key Features](#key-features)
-- [Getting Started](#getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Installation](#installation)
-- [Configuration](#configuration)
-- [Running the Project](#running-the-project)
-- [Project Structure](#project-structure)
-- [License](#license)
-- [Contact](#contact)
-
----
-
-## About The Project
-
-BasicFIM aims to provide a robust and scalable solution for monitoring critical system files and directories. It continuously tracks modifications, creations, or deletions, generating alerts for pre-defined critical files.
-
-Built with a microservices architecture, the core monitoring service is designed to be decoupled, scalable, and easy to maintain.
-
----
-
-## Key Features
-
-- ✅ **Real-Time Monitoring:** Utilizes OS-native APIs for instant event detection.
-- ⚙️ **Configuration-Driven:** Easily define what to monitor and exclude via `config.yaml`.
-- 🚀 **High-Performance API:** Built with **FastAPI** for fast, asynchronous event querying.
-- 🐳 **Dockerized:** Fully containerized for consistent deployments with Docker and Docker Compose.
-- 🌐 **Cross-Platform:** Designed to run on Linux, macOS, and Windows.
-
----
-
-## Getting Started
-
-Follow these steps to get a local development environment running.
-
-### Prerequisites
-
-Make sure you have the following installed on your system:
-
--   **Python** (3.9+ recommended)
--   **Docker**
--   **Docker Compose**
--   **Git**
-
-### Installation
-
-1.  Clone the repository:
-    ```bash
-    git clone https://github.com/your_username/BasicFIM.git
-    cd BasicFIM
-    ```
-2.  Navigate to the API service directory:
-    ```bash
-    cd fim_api_service
-    ```
-3.  (Optional but Recommended) Create and activate a virtual environment:
-    ```bash
-    # For macOS/Linux
-    python3 -m venv .venv
-    source .venv/bin/activate
-
-    # For Windows
-    python -m venv .venv
-    .\.venv\Scripts\activate
-    ```
-4.  Install the required Python packages:
-    ```bash
-    pip install -r requirements.txt
-    ```
-
----
-
-## Configuration
-
-All application settings are managed in the `config/config.yaml` file. Adjust the paths and settings according to your operating system and monitoring needs.
-
-**`config/config.yaml` example:**
-
-```yaml
-fim:
-  paths_to_monitor:
-    - "/etc"
-    - "/var/www"
-  critical_files:
-    - "/etc/passwd"
-    - "/etc/shadow"
-  exclude:
-    patterns:
-      - "*.log"
-      - "*.tmp"
-    directories:
-      - "/proc"
-      - "/var/log"
-      - "__pycache__"
-```
-
------
-
-## Running the Project
-
-For simplified usage, we recommend using Docker Compose to run the entire project. This will build the Docker images and start all defined services (API, Database).
-
-From the root directory of the project (`BasicFIM/`):
-
-```bash
-docker-compose up --build
-```
-
-To run in the background, add the `-d` flag:
-
-```bash
-docker-compose up --build -d
-```
-
-The FIM API service will be accessible at `http://localhost:8000`. You can view the interactive API documentation (Swagger UI) at `http://localhost:8000/docs`.
-
------
-
-## Project Structure
+## 📁 Proje Yapısı
 
 ```
-BasicFIM/
+FIM/
+├── services/
+│   ├── fim-api/                 # Backend API servisi
+│   │   ├── fim_scanner/         # Ana FIM modülleri
+│   │   │   ├── database/        # Database yönetimi
+│   │   │   ├── settings/        # Konfigürasyon
+│   │   │   ├── core/            # Core monitoring logic
+│   │   │   ├── models/          # Data models
+│   │   │   └── main.py         # Ana uygulama
+│   │   ├── Dockerfile          # API container tanımı
+│   │   └── requirements.txt    # Python dependencies
+│   └── frontend/               # Frontend servisi
+│       ├── static/             # Web arayüzü dosyaları
+│       │   ├── index.html      # Ana sayfa
+│       │   └── health.html     # Health check sayfası
+│       ├── Dockerfile          # Frontend container tanımı
+│       └── nginx.conf          # Nginx konfigürasyonu
 ├── config/
-│   └── config.yaml
-├── docker-compose.yml
-├── fim_api_service/
-│   ├── Dockerfile
-│   ├── requirements.txt
-│   └── fim_scanner/
-│       ├── __init__.py
-│       ├── main.py
-│       ├── core/
-│       │   ├── __init__.py
-│       │   └── monitor.py
-│       ├── database/
-│       │   ├── __init__.py
-│       │   └── database.py
-│       ├── models/
-│       │   ├── __init__.py
-│       │   └── event_model.py
-│       └── settings/
-│           ├── __init__.py
-│           └── config_loader.py
-├── frontend_ui_service/
-└── README.md
+│   └── config.yaml            # Ana konfigürasyon
+├── data/                      # Database dosyaları (host'ta saklanır)
+├── logs/                      # Log dosyaları (host'ta saklanır)
+├── docker-compose.yml         # Servis orkestrasyon tanımı
+├── start-fim.sh              # Başlatma scripti
+├── cleanup-fim.sh            # Temizlik scripti
+└── README.md                 # Bu dosya
 ```
 
------
+## 🚀 Hızlı Başlangıç
 
-## License
+### Gereksinimler
 
-Distributed under the MIT License. See `LICENSE` for more information.
+- Docker 20.10+
+- Docker Compose 2.0+
+- 2GB RAM
+- 1GB disk alanı
+
+### Kurulum ve Başlatma
+
+1. **FIM sistemini başlatın:**
+   ```bash
+   ./start-fim.sh
+   ```
+
+2. **Web arayüzüne erişin:**
+   - Dashboard: http://localhost:3000
+   - API: http://localhost:8000
+   - API Docs: http://localhost:8000/docs
+
+### 🔧 Manuel Başlatma
+
+```bash
+# Database kurulumu
+docker-compose run --rm fim-db-init
+
+# Servisleri başlat
+docker-compose up -d
+```
+
+## 🎛️ Kullanım
+
+### Web Dashboard
+
+Dashboard üzerinden:
+- ✅ Sistem durumunu izleyin
+- 📊 İzlenen dosya sayısını görün
+- ⚡ Son değişiklikleri takip edin
+- 🎯 Aktif profili kontrol edin
+
+### REST API Endpoints
+
+```bash
+# Sistem durumu
+curl http://localhost:8000/api/v1/status
+
+# İzlenen dosyalar
+curl http://localhost:8000/api/v1/files
+
+# Son olaylar
+curl http://localhost:8000/api/v1/events
+
+# Health check
+curl http://localhost:8000/health
+```
+
+## 🧹 Temizlik
+
+### Sistemi Tamamen Temizleme
+
+```bash
+./cleanup-fim.sh
+```
+
+### Sadece Container'ları Durdurma
+
+```bash
+docker-compose down
+```
+
+## 📋 Güvenlik Profilleri
+
+### Light Profile
+- Minimal performans etkisi
+- Sadece kritik sistem dosyaları
+
+### Balanced Profile (Önerilen)
+- Dengeli güvenlik/performans
+- Çoğu üretim ortamı için ideal
+
+### Paranoid Profile
+- Maksimum güvenlik
+- Geniş dosya izleme
 
 ---
 
-## Contact
-
-mail: ekremunalw1@gmail.com
-
-Project Link: [https://github.com/Ekremunalytu/BasicFIM](https://github.com/your_username/BasicFIM)
+**🔒 FIM - Dosyalarınızı güvende tutun!**

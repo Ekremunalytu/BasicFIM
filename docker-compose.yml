@@ -1,4 +1,116 @@
-FROM ubuntu:latest
-LABEL authors="ekrem"
+# FIM (File Integrity Monitoring) Docker Compose Configuration
+# ==============================================================
+# Bu dosya tüm FIM servislerini Docker içerisinde çalıştırır.
+# Ana makinenizi kirletmeden tam bir FIM sistemi çalıştırabilirsiniz.
 
-ENTRYPOINT ["top", "-b"]
+services:
+  # ================================================================
+  # FIM API Service - Backend
+  # ================================================================
+  fim-api:
+    build:
+      context: ./services/fim-api
+      dockerfile: Dockerfile
+    container_name: fim-api
+    restart: unless-stopped
+    
+    ports:
+      - "8000:8000"  # API portu
+    
+    volumes:
+      # Database ve log dosyalarını host'ta sakla (development için)
+      # Production'da named volumes kullanabilirsiniz: fim-data:/app/data
+      - ./data:/app/data
+      - ./logs:/app/logs
+      # Config dosyasını mount et
+      - ./config/config.yaml:/app/config.yaml:ro
+    
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - TZ=Europe/Istanbul
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    
+    networks:
+      - fim-network
+
+  # ================================================================
+  # Frontend Service - Web UI
+  # ================================================================
+  fim-frontend:
+    build:
+      context: ./services/frontend
+      dockerfile: Dockerfile
+    container_name: fim-frontend
+    restart: unless-stopped
+    
+    ports:
+      - "3000:80"  # Web UI portu
+    
+    depends_on:
+      fim-api:
+        condition: service_healthy
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health.html"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    
+    networks:
+      - fim-network
+
+  # ================================================================
+  # Database Initialization Service (Run Once)
+  # ================================================================
+  fim-db-init:
+    build:
+      context: ./services/fim-api
+      dockerfile: Dockerfile
+    container_name: fim-db-init
+    
+    volumes:
+      # Database ve log dosyalarını host'ta sakla
+      - ./data:/app/data
+      # Config dosyasını mount et
+      - ./config/config.yaml:/app/config.yaml:ro
+    
+    environment:
+      - PYTHONPATH=/app
+    
+    command: >
+      sh -c "
+        echo '🔧 Database kurulumu başlatılıyor...' &&
+        python fim_scanner/database/database.py &&
+        echo '📋 Baseline verileri yükleniyor...' &&
+        python fim_scanner/database/initialize_baseline.py &&
+        echo '✅ Database kurulumu tamamlandı!'
+      "
+    
+    restart: "no"  # Sadece bir kez çalıştır
+    
+    networks:
+      - fim-network
+
+# ================================================================
+# Networks
+# ================================================================
+networks:
+  fim-network:
+    driver: bridge
+    name: fim-network
+
+# ================================================================
+# Volumes (Opsiyonel - Named volumes kullanmak isterseniz)
+# ================================================================
+volumes:
+  fim-data:
+    driver: local
+  fim-logs:
+    driver: local

@@ -8,6 +8,23 @@ fim:
   # --------------------------------------------------------------------
   active_profile: "balanced"
 
+  # --------------------------------------------------------------------
+  # Monitoring Configuration
+  # --------------------------------------------------------------------
+  monitoring:
+    paths:
+      - "/app/data/test_monitoring"
+      - "/app/logs"
+    excluded_patterns:
+      - ".git"
+      - "__pycache__"
+      - ".pyc"
+      - ".tmp"
+      - ".log"
+      - ".cache"
+    scan_interval: 300  # seconds
+    enable_realtime: true
+
   # ====================================================================
   # SECURITY PROFILE DEFINITIONS
   # ====================================================================
