@@ -13,6 +13,25 @@ from typing import List, Dict, Any, Optional
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler, FileSystemEvent
 
+try:
+    from models.event_model import EventType, FileEvent
+except ImportError:
+    # Fallback if event model is not available
+    class EventType:
+        CREATED = "created"
+        MODIFIED = "modified"
+        DELETED = "deleted"
+        MOVED = "moved"
+        RENAMED = "renamed"
+        ACCESSED = "accessed"
+    
+    class FileEvent:
+        def __init__(self, event_type, file_path, **kwargs):
+            self.event_type = event_type
+            self.file_path = file_path
+            for k, v in kwargs.items():
+                setattr(self, k, v)
+
 logger = logging.getLogger(__name__)
 
 class FIMEventHandler(FileSystemEventHandler):
@@ -40,7 +59,16 @@ class FIMEventHandler(FileSystemEventHandler):
     def on_moved(self, event: FileSystemEvent):
         """Handle file move/rename events"""
         if not event.is_directory:
+            # Handle the old file as deleted
+            self.monitor.handle_file_change(event.src_path, 'deleted')
+            # Handle the new file as moved/created
             self.monitor.handle_file_change(event.dest_path, 'moved')
+            
+            # If it's just a rename (same directory), mark as renamed
+            src_dir = os.path.dirname(event.src_path)
+            dest_dir = os.path.dirname(event.dest_path)
+            if src_dir == dest_dir:
+                self.monitor.handle_file_change(event.dest_path, 'renamed')
 
 class FileMonitor:
     """Main file monitoring class for FIM system"""
@@ -101,25 +129,46 @@ class FileMonitor:
             
             # Calculate new hash if file exists
             new_hash = None
+            file_size = 0
             if event_type != 'deleted' and os.path.exists(file_path):
                 new_hash = self.calculate_file_hash(file_path)
+                file_size = os.path.getsize(file_path)
             
             # Get existing file info from database
             existing_info = self.db_manager.get_file_info(file_path)
             
-            # Record the event
-            self.db_manager.record_event({
-                'file_path': file_path,
-                'event_type': event_type,
-                'timestamp': datetime.now().isoformat(),
-                'old_hash': existing_info.get('checksum') if existing_info else None,
-                'new_hash': new_hash,
-                'file_size': os.path.getsize(file_path) if os.path.exists(file_path) else 0
-            })
+            # Only record event if there's an actual change
+            should_record_event = False
+            old_hash = existing_info.get('baseline_hash') if existing_info else None
+            
+            if event_type == 'deleted':
+                should_record_event = True
+            elif event_type == 'created':
+                should_record_event = existing_info is None  # Only if truly new
+            elif event_type == 'modified':
+                # Only record if hash actually changed
+                should_record_event = old_hash != new_hash
+            else:  # moved
+                should_record_event = True
+            
+            if should_record_event:
+                # Record the event
+                self.db_manager.record_event({
+                    'file_path': file_path,
+                    'event_type': event_type,
+                    'timestamp': datetime.now().isoformat(),
+                    'old_hash': old_hash,
+                    'new_hash': new_hash,
+                    'file_size': file_size,
+                    'description': f"File {event_type}: {os.path.basename(file_path)}"
+                })
+                logger.info(f"Recorded change event for {file_path}: {event_type}")
+            else:
+                logger.debug(f"No actual change detected for {file_path}, skipping event")
             
             # Update file info in database
             if event_type != 'deleted':
-                self.db_manager.update_file_info(file_path, new_hash)
+                self.db_manager.update_file_info(file_path, new_hash, file_size)
             else:
                 self.db_manager.remove_file_info(file_path)
                 
@@ -175,17 +224,36 @@ class FileMonitor:
             # Check if file is already in database
             existing_info = self.db_manager.get_file_info(file_str)
             
-            if not existing_info or force_rescan:
-                # New file or forced rescan
-                self.db_manager.update_file_info(file_str, current_hash)
-                if not existing_info:
-                    logger.debug(f"Added new file to monitoring: {file_str}")
+            if not existing_info:
+                # New file - add to monitoring
+                file_size = os.path.getsize(file_str)
+                self.db_manager.update_file_info(file_str, current_hash, file_size)
+                logger.debug(f"Added new file to monitoring: {file_str}")
+            elif force_rescan:
+                # Forced rescan - update baseline
+                file_size = os.path.getsize(file_str)
+                self.db_manager.update_file_info(file_str, current_hash, file_size)
+                logger.debug(f"Updated baseline for: {file_str}")
             else:
-                # Check if file has changed
-                stored_hash = existing_info.get('checksum')
+                # Check if file has actually changed
+                stored_hash = existing_info.get('baseline_hash')
                 if stored_hash != current_hash:
                     logger.warning(f"File integrity changed: {file_str}")
+                    # This will trigger a proper change detection
                     self.handle_file_change(file_str, 'modified')
+                else:
+                    # File hasn't changed, just update scan time
+                    current_time = datetime.now().timestamp()
+                    try:
+                        cursor = self.db_manager.connection.cursor()
+                        cursor.execute("""
+                            UPDATE monitored_files 
+                            SET last_scanned_time = ?, updated_at = ?
+                            WHERE file_path = ?
+                        """, (current_time, current_time, file_str))
+                        self.db_manager.connection.commit()
+                    except Exception as e:
+                        logger.error(f"Failed to update scan time for {file_str}: {e}")
                     
         except Exception as e:
             logger.error(f"Error processing file {file_path}: {e}")

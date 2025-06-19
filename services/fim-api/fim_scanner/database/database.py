@@ -317,13 +317,26 @@ class DatabaseManager:
         try:
             cursor = self.connection.cursor()
             cursor.execute("""
-                SELECT file_path, baseline_hash, status, last_scanned_time, baseline_size
+                SELECT id, file_path, baseline_hash as checksum, status, 
+                       last_scanned_time, baseline_size, 
+                       datetime(created_at, 'unixepoch') as created_at,
+                       datetime(updated_at, 'unixepoch') as updated_at
                 FROM monitored_files 
                 ORDER BY file_path
             """)
             
             rows = cursor.fetchall()
-            return [dict(row) for row in rows]
+            files = []
+            for row in rows:
+                file_dict = dict(row)
+                # Format timestamps
+                if file_dict.get('last_scanned_time'):
+                    file_dict['last_scanned'] = datetime.fromtimestamp(file_dict['last_scanned_time']).strftime('%Y-%m-%d %H:%M:%S')
+                else:
+                    file_dict['last_scanned'] = 'Never'
+                files.append(file_dict)
+            
+            return files
             
         except Exception as e:
             logger.error(f"Failed to get all files: {e}")
@@ -362,7 +375,197 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Failed to cleanup old events: {e}")
             self.connection.rollback()
+    
+    def get_recent_events_formatted(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get recent events with formatted timestamps and additional details"""
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute("""
+                SELECT cl.*, 
+                       datetime(cl.event_time, 'unixepoch') as formatted_time,
+                       mf.status as file_status
+                FROM change_log cl
+                LEFT JOIN monitored_files mf ON cl.file_path = mf.file_path
+                ORDER BY cl.event_time DESC 
+                LIMIT ?
+            """, (limit,))
+            
+            rows = cursor.fetchall()
+            events = []
+            for row in rows:
+                event_dict = dict(row)
+                # Calculate time ago
+                event_time = datetime.fromtimestamp(event_dict['event_time'])
+                time_diff = datetime.now() - event_time
+                
+                if time_diff.days > 0:
+                    event_dict['time_ago'] = f"{time_diff.days} gün önce"
+                elif time_diff.seconds > 3600:
+                    hours = time_diff.seconds // 3600
+                    event_dict['time_ago'] = f"{hours} saat önce"
+                elif time_diff.seconds > 60:
+                    minutes = time_diff.seconds // 60
+                    event_dict['time_ago'] = f"{minutes} dakika önce"
+                else:
+                    event_dict['time_ago'] = "Az önce"
+                
+                # Format file size
+                if event_dict.get('file_size'):
+                    size = event_dict['file_size']
+                    if size > 1024*1024:
+                        event_dict['file_size_formatted'] = f"{size/(1024*1024):.1f} MB"
+                    elif size > 1024:
+                        event_dict['file_size_formatted'] = f"{size/1024:.1f} KB"
+                    else:
+                        event_dict['file_size_formatted'] = f"{size} B"
+                else:
+                    event_dict['file_size_formatted'] = "Bilinmiyor"
+                
+                # Extract filename from path
+                event_dict['filename'] = os.path.basename(event_dict['file_path'])
+                
+                events.append(event_dict)
+            
+            return events
+            
+        except Exception as e:
+            logger.error(f"Failed to get formatted events: {e}")
+            return []
 
+    def get_file_categories(self) -> Dict[str, int]:
+        """Get file counts by category/extension"""
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute("""
+                SELECT 
+                    CASE 
+                        WHEN file_path LIKE '%.py' THEN 'Python'
+                        WHEN file_path LIKE '%.js' THEN 'JavaScript'
+                        WHEN file_path LIKE '%.html' THEN 'HTML'
+                        WHEN file_path LIKE '%.css' THEN 'CSS'
+                        WHEN file_path LIKE '%.json' THEN 'JSON'
+                        WHEN file_path LIKE '%.yaml' OR file_path LIKE '%.yml' THEN 'YAML'
+                        WHEN file_path LIKE '%.txt' THEN 'Text'
+                        WHEN file_path LIKE '%.log' THEN 'Log'
+                        WHEN file_path LIKE '%.md' THEN 'Markdown'
+                        WHEN file_path LIKE '%.conf' OR file_path LIKE '%.config' THEN 'Config'
+                        ELSE 'Diğer'
+                    END as category,
+                    COUNT(*) as count
+                FROM monitored_files
+                GROUP BY category
+                ORDER BY count DESC
+            """)
+            
+            rows = cursor.fetchall()
+            return {row[0]: row[1] for row in rows}
+            
+        except Exception as e:
+            logger.error(f"Failed to get file categories: {e}")
+            return {}
+        
+    def get_event_statistics(self) -> Dict[str, Any]:
+        """Get comprehensive event statistics"""
+        try:
+            cursor = self.connection.cursor()
+            
+            # Get events by type
+            cursor.execute("""
+                SELECT event_type, COUNT(*) as count
+                FROM change_log
+                GROUP BY event_type
+                ORDER BY count DESC
+            """)
+            events_by_type = dict(cursor.fetchall())
+            
+            # Get recent events (last 24 hours)
+            yesterday = datetime.now().timestamp() - (24 * 60 * 60)
+            cursor.execute("""
+                SELECT event_type, COUNT(*) as count
+                FROM change_log
+                WHERE event_time > ?
+                GROUP BY event_type
+            """, (yesterday,))
+            recent_events_by_type = dict(cursor.fetchall())
+            
+            # Get events by day (last 7 days)
+            week_ago = datetime.now().timestamp() - (7 * 24 * 60 * 60)
+            cursor.execute("""
+                SELECT date(event_time, 'unixepoch') as event_date, 
+                       COUNT(*) as count
+                FROM change_log
+                WHERE event_time > ?
+                GROUP BY event_date
+                ORDER BY event_date DESC
+            """, (week_ago,))
+            events_by_day = dict(cursor.fetchall())
+            
+            return {
+                "total_events": sum(events_by_type.values()),
+                "events_by_type": events_by_type,
+                "recent_events_by_type": recent_events_by_type,
+                "events_by_day": events_by_day
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to get event statistics: {e}")
+            return {}
+
+    def get_files_with_details(self) -> List[Dict[str, Any]]:
+        """Get list of all monitored files with additional details"""
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute("""
+                SELECT mf.*, 
+                       COUNT(cl.id) as event_count,
+                       MAX(cl.event_time) as last_event_time,
+                       datetime(mf.created_at, 'unixepoch') as created_formatted,
+                       datetime(mf.updated_at, 'unixepoch') as updated_formatted
+                FROM monitored_files mf
+                LEFT JOIN change_log cl ON mf.id = cl.monitored_file_id
+                GROUP BY mf.id
+                ORDER BY mf.file_path
+            """)
+            
+            rows = cursor.fetchall()
+            files = []
+            
+            for row in rows:
+                file_dict = dict(row)
+                
+                # Format timestamps
+                if file_dict.get('last_scanned_time'):
+                    file_dict['last_scanned'] = datetime.fromtimestamp(file_dict['last_scanned_time']).strftime('%Y-%m-%d %H:%M:%S')
+                else:
+                    file_dict['last_scanned'] = 'Never'
+                
+                if file_dict.get('last_event_time'):
+                    file_dict['last_event'] = datetime.fromtimestamp(file_dict['last_event_time']).strftime('%Y-%m-%d %H:%M:%S')
+                else:
+                    file_dict['last_event'] = 'Never'
+                
+                # Format file size
+                size = file_dict.get('baseline_size', 0)
+                if size > 1024*1024:
+                    file_dict['size_formatted'] = f"{size/(1024*1024):.1f} MB"
+                elif size > 1024:
+                    file_dict['size_formatted'] = f"{size/1024:.1f} KB"
+                else:
+                    file_dict['size_formatted'] = f"{size} B"
+                
+                # Extract filename and directory
+                file_path = file_dict['file_path']
+                file_dict['filename'] = os.path.basename(file_path)
+                file_dict['directory'] = os.path.dirname(file_path)
+                
+                files.append(file_dict)
+            
+            return files
+            
+        except Exception as e:
+            logger.error(f"Failed to get files with details: {e}")
+            return []
+        
 
 # Legacy function for backward compatibility
 def setup_database_and_tables():

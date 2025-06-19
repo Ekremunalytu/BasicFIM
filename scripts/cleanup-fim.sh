@@ -2,7 +2,20 @@
 
 # FIM System Cleanup Script
 # =========================
-# Bu script FIM sistemini tamamen temizler.
+# Bu script FIM s# Veri dosyalarını da silmek isteyip istemediğini sor
+echo ""
+read -p "🗑️  Veri dosyalarını da silmek istiyor musunuz? (database, logs) [y/N]: " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    log_warning "Veri dosyaları siliniyor..."
+    if [ "$PRODUCTION_MODE" = true ]; then
+        sudo rm -rf /opt/fim/data/*.db* /opt/fim/logs/*.log 2>/dev/null || true
+    else
+        cd "$PROJECT_DIR"
+        rm -rf ./data/*.db* ./logs/*.log 2>/dev/null || true
+    fi
+    log_success "Veri dosyaları silindi"
+elseen temizler.
 
 set -e
 

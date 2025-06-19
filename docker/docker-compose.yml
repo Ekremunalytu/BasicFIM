@@ -27,8 +27,8 @@ services:
     volumes:
       # Database ve log dosyalarını host'ta sakla (development için)
       # Production'da named volumes kullanabilirsiniz: fim-data:/app/data
-      - ../data:/app/data
-      - ../logs:/app/logs
+      - ../data:/app/data:Z
+      - ../logs:/app/logs:Z
       # Config dosyasını mount et
       - ../config/config.yaml:/app/config.yaml:ro
     
@@ -111,7 +111,7 @@ services:
     
     volumes:
       # Database ve log dosyalarını host'ta sakla
-      - ../data:/app/data
+      - ../data:/app/data:Z
       # Config dosyasını mount et
       - ../config/config.yaml:/app/config.yaml:ro
     

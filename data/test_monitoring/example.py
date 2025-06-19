@@ -1,0 +1,1 @@
+Python kodu örneği

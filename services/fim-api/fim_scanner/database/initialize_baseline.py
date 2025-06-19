@@ -7,6 +7,7 @@ import os
 import sys
 import hashlib
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any
 
@@ -117,8 +118,18 @@ def _process_baseline_file(db_manager, file_path: str) -> bool:
         except:
             file_size = 0
         
-        # Add to database
-        db_manager.update_file_info(file_path, file_hash, file_size)
+        # Add to database without recording as an event (it's baseline)
+        cursor = db_manager.connection.cursor()
+        current_time = datetime.now().timestamp()
+        
+        cursor.execute("""
+            INSERT INTO monitored_files 
+            (file_path, baseline_hash, baseline_size, baseline_creation_time, 
+             last_scanned_time, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, 'OK', ?, ?)
+        """, (file_path, file_hash, file_size, current_time, current_time, current_time, current_time))
+        
+        db_manager.connection.commit()
         logger.debug(f"Added to baseline: {file_path}")
         
         return True
