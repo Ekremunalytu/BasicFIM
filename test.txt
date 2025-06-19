@@ -1,3 +1,0 @@
-This is a test file for FIM monitoring.
-Any changes to this file will be detected.
-Initial content for baseline creation.

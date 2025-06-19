@@ -9,10 +9,17 @@ services:
   # ================================================================
   fim-api:
     build:
-      context: ./services/fim-api
+      context: ../services/fim-api
       dockerfile: Dockerfile
     container_name: fim-api
     restart: unless-stopped
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     
     ports:
       - "8000:8000"  # API portu
@@ -20,15 +27,25 @@ services:
     volumes:
       # Database ve log dosyalarını host'ta sakla (development için)
       # Production'da named volumes kullanabilirsiniz: fim-data:/app/data
-      - ./data:/app/data
-      - ./logs:/app/logs
+      - ../data:/app/data
+      - ../logs:/app/logs
       # Config dosyasını mount et
-      - ./config/config.yaml:/app/config.yaml:ro
+      - ../config/config.yaml:/app/config.yaml:ro
     
     environment:
       - PYTHONPATH=/app
       - PYTHONUNBUFFERED=1
       - TZ=Europe/Istanbul
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
     
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -45,10 +62,17 @@ services:
   # ================================================================
   fim-frontend:
     build:
-      context: ./services/frontend
+      context: ../services/frontend
       dockerfile: Dockerfile
     container_name: fim-frontend
     restart: unless-stopped
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
     
     ports:
       - "3000:80"  # Web UI portu
@@ -56,6 +80,16 @@ services:
     depends_on:
       fim-api:
         condition: service_healthy
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.25'
+        reservations:
+          memory: 64M
+          cpus: '0.1'
     
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:80/health.html"]
@@ -71,15 +105,15 @@ services:
   # ================================================================
   fim-db-init:
     build:
-      context: ./services/fim-api
+      context: ../services/fim-api
       dockerfile: Dockerfile
     container_name: fim-db-init
     
     volumes:
       # Database ve log dosyalarını host'ta sakla
-      - ./data:/app/data
+      - ../data:/app/data
       # Config dosyasını mount et
-      - ./config/config.yaml:/app/config.yaml:ro
+      - ../config/config.yaml:/app/config.yaml:ro
     
     environment:
       - PYTHONPATH=/app

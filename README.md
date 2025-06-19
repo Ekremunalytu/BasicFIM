@@ -17,7 +17,7 @@ Modern, containerized dosya bütünlüğü izleme sistemi. Tam Docker destekli, 
 
 ```
 FIM/
-├── services/
+├── services/                    # Mikro servisler
 │   ├── fim-api/                 # Backend API servisi
 │   │   ├── fim_scanner/         # Ana FIM modülleri
 │   │   │   ├── database/        # Database yönetimi
@@ -26,21 +26,27 @@ FIM/
 │   │   │   ├── models/          # Data models
 │   │   │   └── main.py         # Ana uygulama
 │   │   ├── Dockerfile          # API container tanımı
-│   │   └── requirements.txt    # Python dependencies
+│   │   ├── requirements.txt    # Python dependencies
+│   │   └── .dockerignore       # Docker ignore rules
 │   └── frontend/               # Frontend servisi
 │       ├── static/             # Web arayüzü dosyaları
 │       │   ├── index.html      # Ana sayfa
 │       │   └── health.html     # Health check sayfası
 │       ├── Dockerfile          # Frontend container tanımı
-│       └── nginx.conf          # Nginx konfigürasyonu
+│       ├── nginx.conf          # Nginx konfigürasyonu
+│       └── .dockerignore       # Docker ignore rules
+├── docker/                     # Docker konfigürasyonları
+│   ├── docker-compose.yml      # Development ortamı
+│   └── docker-compose.prod.yml # Production ortamı
+├── scripts/                    # Yardımcı scriptler
+│   ├── start-fim.sh            # Başlatma scripti
+│   └── cleanup-fim.sh          # Temizlik scripti
 ├── config/
 │   └── config.yaml            # Ana konfigürasyon
 ├── data/                      # Database dosyaları (host'ta saklanır)
 ├── logs/                      # Log dosyaları (host'ta saklanır)
-├── docker-compose.yml         # Servis orkestrasyon tanımı
-├── start-fim.sh              # Başlatma scripti
-├── cleanup-fim.sh            # Temizlik scripti
-└── README.md                 # Bu dosya
+├── fim                        # Ana kontrol scripti
+└── README.md                  # Bu dosya
 ```
 
 ## 🚀 Hızlı Başlangıç
@@ -54,24 +60,61 @@ FIM/
 
 ### Kurulum ve Başlatma
 
-1. **FIM sistemini başlatın:**
+**🎯 Kolay Kullanım (Önerilen):**
+```bash
+# Development ortamı
+./fim start
+
+# Production ortamı  
+./fim start --production
+
+# Temiz başlatma
+./fim start --clean
+
+# Durumu görme
+./fim status
+
+# Sistem durdurma
+./fim stop
+
+# Temizlik
+./fim clean
+```
+
+**🔧 Manuel Kullanım:**
+1. **Development ortamı için FIM sistemini başlatın:**
    ```bash
-   ./start-fim.sh
+   ./scripts/start-fim.sh
    ```
 
-2. **Web arayüzüne erişin:**
+2. **Production ortamı için FIM sistemini başlatın:**
+   ```bash
+   ./scripts/start-fim.sh --production
+   ```
+
+3. **Web arayüzüne erişin:**
    - Dashboard: http://localhost:3000
    - API: http://localhost:8000
    - API Docs: http://localhost:8000/docs
 
-### 🔧 Manuel Başlatma
+### 🔧 Manuel Docker Komutları
 
+**Development:**
 ```bash
 # Database kurulumu
-docker-compose run --rm fim-db-init
+docker-compose -f docker/docker-compose.yml run --rm fim-db-init
 
 # Servisleri başlat
-docker-compose up -d
+docker-compose -f docker/docker-compose.yml up -d
+```
+
+**Production:**
+```bash
+# Database kurulumu
+docker-compose -f docker/docker-compose.prod.yml run --rm fim-db-init
+
+# Servisleri başlat
+docker-compose -f docker/docker-compose.prod.yml up -d
 ```
 
 ## 🎛️ Kullanım
@@ -102,13 +145,16 @@ curl http://localhost:8000/health
 
 ## 🧹 Temizlik
 
-### Sistemi Tamamen Temizleme
-
 ```bash
-./cleanup-fim.sh
-```
+# Development temizliği
+./fim clean
 
-### Sadece Container'ları Durdurma
+# Production temizliği
+./fim clean --production
+
+# Manuel temizlik
+./scripts/cleanup-fim.sh
+```
 
 ```bash
 docker-compose down

@@ -6,6 +6,32 @@
 
 set -e
 
+# Production mode detection
+PRODUCTION_MODE=false
+COMPOSE_FILE="docker-compose.yml"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+DOCKER_DIR="$PROJECT_DIR/docker"
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --production|--prod|-p)
+            PRODUCTION_MODE=true
+            COMPOSE_FILE="docker-compose.prod.yml"
+            shift
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Usage: $0 [--production|--prod|-p]"
+            exit 1
+            ;;
+    esac
+done
+
+# Set full compose file path
+COMPOSE_PATH="$DOCKER_DIR/$COMPOSE_FILE"
+
 # Renkli output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -28,12 +54,18 @@ log_warning() {
 echo -e "${YELLOW}"
 echo "================================================================"
 echo "🧹 FIM System Cleanup"
+if [ "$PRODUCTION_MODE" = true ]; then
+    echo "🏭 Production Mode"
+else
+    echo "🔧 Development Mode"
+fi
 echo "================================================================"
 echo -e "${NC}"
 
 # Container'ları durdur ve kaldır
-log_info "FIM container'ları durduruluyor..."
-docker-compose down --remove-orphans 2>/dev/null || true
+log_info "FIM container'ları durduruluyor ($COMPOSE_FILE)..."
+cd "$PROJECT_DIR"
+docker-compose -f "$COMPOSE_PATH" down --remove-orphans 2>/dev/null || true
 
 # Docker imajlarını kaldır (sadece FIM ile ilgili olanları)
 log_info "FIM Docker imajları kaldırılıyor..."
@@ -58,8 +90,12 @@ read -p "🗑️  Veri dosyalarını da silmek istiyor musunuz? (database, logs)
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     log_warning "Veri dosyları siliniyor..."
-    rm -rf ./data/* 2>/dev/null || true
-    rm -rf ./logs/* 2>/dev/null || true
+    if [ "$PRODUCTION_MODE" = true ]; then
+        sudo rm -rf /opt/fim/data/* /opt/fim/logs/* 2>/dev/null || true
+    else
+        cd "$PROJECT_DIR"
+        rm -rf ./data/* ./logs/* 2>/dev/null || true
+    fi
     log_success "Veri dosyları silindi"
 else
     log_info "Veri dosyları korundu"
@@ -67,4 +103,4 @@ fi
 
 log_success "FIM sistemi tamamen temizlendi!"
 echo ""
-echo "Sistemi yeniden başlatmak için: ./start-fim.sh"
+echo "Sistemi yeniden başlatmak için: $PROJECT_DIR/fim start"

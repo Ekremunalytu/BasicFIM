@@ -1,6 +1,9 @@
 # FIM API Service Dockerfile
 FROM python:3.11-slim as base
 
+# Create non-root user for security
+RUN groupadd -r fim && useradd -r -g fim fim
+
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     sqlite3 \
@@ -21,11 +24,15 @@ RUN pip install --no-cache-dir --upgrade pip \
 # Copy application code
 COPY . .
 
-# Create necessary directories
-RUN mkdir -p /app/data /app/logs
+# Create necessary directories and set ownership
+RUN mkdir -p /app/data /app/logs \
+    && chown -R fim:fim /app
 
 # Set permissions
 RUN chmod +x /app/fim_scanner/database/*.py
+
+# Switch to non-root user
+USER fim
 
 # Set Python path for proper imports
 ENV PYTHONPATH=/app

@@ -1,0 +1,155 @@
+# FIM Production Docker Compose Configuration
+# =============================================
+# Production ortamı için optimize edilmiş Docker Compose konfigürasyonu
+# Named volumes ve güvenlik ayarları ile
+
+services:
+  # ================================================================
+  # FIM API Service - Backend (Production)
+  # ================================================================
+  fim-api:
+    build:
+      context: ../services/fim-api
+      dockerfile: Dockerfile
+    container_name: fim-api-prod
+    restart: always
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+    
+    ports:
+      - "8000:8000"
+    
+    # Named volumes for production
+    volumes:
+      - fim-data:/app/data
+      - fim-logs:/app/logs
+      - ../config/config.yaml:/app/config.yaml:ro
+    
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - TZ=Europe/Istanbul
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    
+    networks:
+      - fim-network
+
+  # ================================================================
+  # Frontend Service - Web UI (Production)
+  # ================================================================
+  fim-frontend:
+    build:
+      context: ../services/frontend
+      dockerfile: Dockerfile
+    container_name: fim-frontend-prod
+    restart: always
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+    
+    ports:
+      - "3000:80"
+    
+    depends_on:
+      fim-api:
+        condition: service_healthy
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.25'
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health.html"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    
+    networks:
+      - fim-network
+
+  # ================================================================
+  # Database Initialization Service (Production)
+  # ================================================================
+  fim-db-init:
+    build:
+      context: ../services/fim-api
+      dockerfile: Dockerfile
+    container_name: fim-db-init-prod
+    
+    volumes:
+      - fim-data:/app/data
+      - ../config/config.yaml:/app/config.yaml:ro
+    
+    environment:
+      - PYTHONPATH=/app
+    
+    command: >
+      sh -c "
+        echo '🔧 Production database kurulumu başlatılıyor...' &&
+        python fim_scanner/database/database.py &&
+        echo '📋 Baseline verileri yükleniyor...' &&
+        python fim_scanner/database/initialize_baseline.py &&
+        echo '✅ Production database kurulumu tamamlandı!'
+      "
+    
+    restart: "no"
+    
+    networks:
+      - fim-network
+
+# ================================================================
+# Networks
+# ================================================================
+networks:
+  fim-network:
+    driver: bridge
+    name: fim-network-prod
+
+# ================================================================
+# Named Volumes for Production
+# ================================================================
+volumes:
+  fim-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/fim/data
+  fim-logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/fim/logs
