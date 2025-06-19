@@ -1,0 +1,128 @@
+fim:
+  # --------------------------------------------------------------------
+  # Active Profile Selection
+  # --------------------------------------------------------------------
+  # Change this value to select the desired security profile.
+  # Options: "light", "balanced", "paranoid"
+  # "balanced" is recommended for most production environments.
+  # --------------------------------------------------------------------
+  active_profile: "balanced"
+
+  # ====================================================================
+  # SECURITY PROFILE DEFINITIONS
+  # ====================================================================
+  profiles:
+    # --------------------------------------------------------------------
+    # Profile 1: Light
+    # Goal: Minimal performance impact. Monitors only the most critical
+    #       system files for changes. Ideal for low-resource systems.
+    # --------------------------------------------------------------------
+    light:
+      defaults: { scan_type: "realtime", recursive: false, check_hash: true, check_metadata: false, severity: "CRITICAL" }
+      platforms:
+        linux:
+          rules:
+            - { path: "/etc/passwd", description: "User database file" }
+            - { path: "/etc/shadow", description: "Encrypted password file" }
+            - { path: "/etc/sudoers", description: "Privilege escalation rules" }
+            - { path: "/etc/group", description: "User groups file" }
+          exclude_paths: ["/proc", "/sys", "/dev"]
+        windows:
+          rules:
+            - { path: 'C:\Windows\System32\drivers\etc\hosts', description: "Hostname resolution file" }
+            - { path: 'C:\Windows\System32\config\SAM', description: "User account database hive" }
+            - { path: 'C:\Windows\System32\config\SYSTEM', description: "System configuration hive" }
+            - { path: 'C:\Windows\System32\config\SECURITY', description: "Security settings hive" }
+          exclude_paths: ['C:\$Recycle.Bin', 'C:\pagefile.sys']
+
+    # --------------------------------------------------------------------
+    # Profile 2: Balanced (Recommended)
+    # Goal: A comprehensive security posture with manageable performance
+    #       impact. Combines real-time monitoring of critical assets with
+    #       scheduled scans of broader system areas.
+    # --------------------------------------------------------------------
+    balanced:
+      defaults: { scan_type: "realtime", recursive: true, check_hash: true, check_metadata: true, severity: "HIGH" }
+      platforms:
+        linux:
+          rules:
+            # Critical single files are monitored in real-time without recursion.
+            - { path: "/etc/passwd", recursive: false, severity: "CRITICAL", description: "User database file" }
+            - { path: "/etc/shadow", recursive: false, severity: "CRITICAL", description: "Encrypted password file" }
+            - { path: "/etc/sudoers", recursive: false, severity: "CRITICAL", description: "Privilege escalation rules" }
+            # Monitor SSH config for insecure changes using content matching.
+            - { path: "/etc/ssh/sshd_config", severity: "CRITICAL", description: "SSH server configuration", alert_on_content_match: ['(?i)^\s*(PermitRootLogin|PasswordAuthentication)\s+yes'] }
+            # Monitor for persistence via cron jobs.
+            - { path: "/etc/crontab", recursive: false, severity: "HIGH", description: "System-wide cron table" }
+            - { path: "/etc/cron.d", severity: "HIGH", description: "System-wide cron job definitions directory" }
+            - { path: "/var/spool/cron", severity: "HIGH", description: "User-specific cron tables directory" }
+            # Monitor for changes in kernel runtime parameters.
+            - { path: "/etc/sysctl.conf", recursive: false, severity: "MEDIUM", description: "Kernel runtime parameter configuration" }
+            - { path: "/etc/sysctl.d", severity: "MEDIUM", description: "Kernel runtime parameter configuration directory" }
+            # Web root directory - a primary target for attackers.
+            - { path: "/var/www", description: "Web server root directory" }
+            # System binaries are scanned on a schedule to detect unauthorized changes.
+            - { path: "/usr/bin", scan_type: "scheduled", schedule: "0 2 * * *", check_metadata: false, severity: "MEDIUM", description: "User executable binaries" }
+          exclude_paths: ["/proc", "/sys", "/dev", "/var/log", "/var/cache", "/tmp"]
+        windows:
+          rules:
+            # Critical system and configuration files.
+            - { path: 'C:\Windows\System32\drivers\etc\hosts', recursive: false, severity: "CRITICAL", description: "Hostname resolution file" }
+            - { path: 'C:\Windows\System32\config\SAM', recursive: false, severity: "CRITICAL", description: "User account database hive" }
+            # Monitor startup folders for persistence mechanisms. Wildcard (*) covers all users.
+            - { path: 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\StartUp', severity: "CRITICAL", description: "All users startup folder" }
+            - { path: 'C:\Users\*\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup', severity: "CRITICAL", description: "User-specific startup folders" }
+            # Monitor scheduled tasks for persistence.
+            - { path: 'C:\Windows\System32\Tasks', severity: "HIGH", description: "Scheduled tasks directory for persistence" }
+            # Monitor PowerShell profiles for script-based persistence.
+            - { path: 'C:\Users\*\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1', severity: "HIGH", description: "User-specific PowerShell profiles" }
+            - { path: 'C:\Windows\System32\WindowsPowerShell\v1.0\Microsoft.PowerShell_profile.ps1', severity: "HIGH", description: "All-users PowerShell profile" }
+            # Monitor for web shells in IIS root using content matching for common malicious functions.
+            - { path: 'C:\inetpub\wwwroot', description: "IIS web server root", alert_on_content_match: ['(?i)\b(eval|passthru|shell_exec|base64_decode|system|proc_open)\b'] }
+            # Scheduled scans for core system and application directories.
+            - { path: 'C:\Windows\System32', scan_type: "scheduled", schedule: "0 3 * * *", severity: "MEDIUM", description: "Core system binaries and libraries" }
+            - { path: 'C:\Program Files', scan_type: "scheduled", schedule: "0 4 * * *", check_metadata: false, severity: "MEDIUM", description: "Installed 64-bit applications" }
+          exclude_paths: ['C:\$Recycle.Bin', 'C:\pagefile.sys', 'C:\Windows\Temp', 'C:\Windows\WinSxS']
+
+    # --------------------------------------------------------------------
+    # Profile 3: Paranoid
+    # Goal: Maximum detection capability. This profile is resource-intensive
+    #       and may generate significant noise. Use only in high-security
+    #       environments and after thorough performance testing.
+    # --------------------------------------------------------------------
+    paranoid:
+      defaults: { scan_type: "realtime", recursive: true, check_hash: true, check_metadata: true, severity: "HIGH" }
+      platforms:
+        linux:
+          rules:
+            # Real-time monitoring of all configuration, user data, and temporary directories.
+            - { path: "/etc", severity: "CRITICAL", description: "Entire system configuration directory" }
+            - { path: "/home", severity: "HIGH", description: "All user home directories" }
+            - { path: "/root", severity: "CRITICAL", description: "Root user's home directory" }
+            - { path: "/tmp", severity: "MEDIUM", description: "System temporary files" }
+            - { path: "/var/tmp", severity: "MEDIUM", description: "Persistent temporary files" }
+            - { path: "/var/log", severity: "LOW", description: "System log files" } # Monitor for log tampering
+            # Monitor kernel modules for rootkits.
+            - { path: "/lib/modules", severity: "HIGH", description: "Loadable kernel modules" }
+            # Scheduled, deep scan of all binaries and boot files.
+            # NOTE: /bin and /sbin are often symlinks to /usr/bin and /usr/sbin. Scanning /usr covers them.
+            - { path: "/usr", scan_type: "scheduled", schedule: "0 1 * * *", severity: "HIGH", description: "All system binaries, libraries, and shared files" }
+            - { path: "/boot", scan_type: "scheduled", schedule: "0 1 * * *", severity: "CRITICAL", description: "Boot loader and kernel files" }
+          exclude_paths: ["/proc", "/sys", "/dev", "/run"] # Exclude only virtual filesystems
+        windows:
+          rules:
+            # Real-time monitoring of critical system configuration and persistence locations.
+            - { path: 'C:\Windows\System32\config', severity: "CRITICAL", description: "System registry hives" }
+            - { path: 'C:\Windows\System32\drivers\etc', severity: "CRITICAL", description: "System network configuration" }
+            - { path: 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\StartUp', severity: "CRITICAL", description: "All users startup folder" }
+            - { path: 'C:\Users\*\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup', severity: "CRITICAL", description: "User-specific startup folders" }
+            - { path: 'C:\Windows\Tasks', severity: "HIGH", description: "Scheduled tasks for persistence" }
+            - { path: 'C:\Users\*\AppData\Local\Temp', severity: "MEDIUM", description: "User temporary files, common malware staging area" }
+            # Content matching for web shells remains critical.
+            - { path: 'C:\inetpub\wwwroot', description: "IIS web server root", alert_on_content_match: ['(?i)\b(eval|passthru|shell_exec|base64_decode|system|proc_open)\b'] }
+            # WARNING: The following rules are extremely resource-intensive and will significantly impact performance.
+            - { path: 'C:\Windows', scan_type: "scheduled", schedule: "0 2 * * *", severity: "HIGH", description: "Full Windows directory (includes WinSxS)" }
+            - { path: 'C:\Program Files', scan_type: "scheduled", schedule: "0 3 * * *", severity: "MEDIUM", description: "Installed 64-bit applications" }
+            - { path: 'C:\Program Files (x86)', scan_type: "scheduled", schedule: "0 3 * * *", severity: "MEDIUM", description: "Installed 32-bit applications" }
+            - { path: 'C:\Users', scan_type: "scheduled", schedule: "0 4 * * *", severity: "MEDIUM", description: "All user profiles and data" }
+          exclude_paths: ['C:\$Recycle.Bin', 'C:\pagefile.sys', 'C:\hiberfil.sys', 'C:\System Volume Information']

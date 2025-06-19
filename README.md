@@ -166,6 +166,6 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 ## Contact
 
-Ekrem - ekrem@example.com
+mail: ekremunalw1@gmail.com
 
-Project Link: [https://github.com/your_username/BasicFIM](https://github.com/your_username/BasicFIM)
+Project Link: [https://github.com/Ekremunalytu/BasicFIM](https://github.com/your_username/BasicFIM)
